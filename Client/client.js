@@ -6,7 +6,7 @@ global.env = ENVIRONMENT_MODULE
 
 process.on('uncaughtException', function (err) {
     if (err.message && err.message.indexOf("EADDRINUSE") > 0) {
-        console.log("A Superalgos Client cannot be started. Reason: the port " + port + " is already in use by another application.")
+        console.log("A Superalgos Client cannot be started. Reason: the port configured migth be being used by another application.")
         return
     }
     console.log('[ERROR] Client -> client-> uncaughtException -> err.message = ' + err.message)
@@ -16,6 +16,12 @@ process.on('uncaughtException', function (err) {
 })
 
 process.on('unhandledRejection', (reason, p) => {
+    // Signal user that a necissary node module is missing
+    if (reason.code == 'MODULE_NOT_FOUND') {
+        console.log("[ERROR] Dependency library not found. Please try running the 'node setup' command and then restart the Client.")
+        console.log('[ERROR] Client -> client-> reason = ' + JSON.stringify(reason))
+        process.exit(1)
+    }
     console.log('[ERROR] Client -> client-> unhandledRejection -> reason = ' + JSON.stringify(reason))
     console.log('[ERROR] Client -> client-> unhandledRejection -> p = ' + JSON.stringify(p))
     process.exit(1)
@@ -48,6 +54,9 @@ global.CUSTOM_FAIL_RESPONSE = {
     message: 'Custom Message'
 }
 
+/* The CL object is accesible everywhere at the Superalgos Client */
+global.CL = {}
+
 /* Servers */
 let WEB_SERVER = require('./webServer.js')
 let DATA_FILE_SERVER = require('./dataFileServer.js')
@@ -58,86 +67,112 @@ let EVENT_SERVER = require('./eventServer.js')
 let TASK_MANAGER_SERVER = require('./taskManagerServer.js')
 let CCXT_SERVER = require('./ccxtServer.js')
 let WEB3_SERVER = require('./web3Server.js')
+let GITHUB_SERVER = require('./githubServer.js')
 
 /* Network Interfaces */
-let WEB_SOCKETS_INTERFACE = require('./webSocketsServer.js')
+let WEB_SOCKETS_INTERFACE = require('./webSocketsInterface.js')
 let HTTP_INTERFACE = require('./httpInterface.js')
 
 try {
+    /* 
+    Setting up the modules that will be available for the Servers Running inside this Client 
+    */
+    let MULTI_PROJECT = require('./MultiProject.js');
+    let MULTI_PROJECT_MODULE = MULTI_PROJECT.newMultiProject()
+    MULTI_PROJECT_MODULE.initialize()
+    /*
+    Setting up external dependencies.
+    */
+    CL.nodeModules = {
+        fs: require('fs'),
+        nodeFetch: require('node-fetch')
+    }
+    /*
+    Setting up servers running inside this Client.
+    */
+    CL.servers = {}
     console.log('CLIENT SERVERS:')
     console.log('')
 
-    WEB_SERVER = WEB_SERVER.newWebServer()
-    WEB_SERVER.initialize()
-    WEB_SERVER.run()
-    console.log('Web Server ......................... Started')
+    CL.servers.WEB_SERVER = WEB_SERVER.newWebServer()
+    CL.servers.WEB_SERVER.initialize()
+    CL.servers.WEB_SERVER.run()
+    console.log('Web Server .................................................. Started')
 
-    UI_FILE_SERVER = UI_FILE_SERVER.newUIFileServer()
-    UI_FILE_SERVER.initialize()
-    UI_FILE_SERVER.run()
-    console.log('UI File Server ..................... Started')
+    CL.servers.UI_FILE_SERVER = UI_FILE_SERVER.newUIFileServer()
+    CL.servers.UI_FILE_SERVER.initialize()
+    CL.servers.UI_FILE_SERVER.run()
+    console.log('UI File Server .............................................. Started')
 
-    PROJECT_FILE_SERVER = PROJECT_FILE_SERVER.newProjectFileServer()
-    PROJECT_FILE_SERVER.initialize()
-    PROJECT_FILE_SERVER.run()
-    console.log('Project File Server ................ Started')
-    
-    PLUGIN_SERVER = PLUGIN_SERVER.newPluginServer()
-    PLUGIN_SERVER.initialize()
-    PLUGIN_SERVER.run()
-    console.log('Plugin Server ...................... Started')
+    CL.servers.PROJECT_FILE_SERVER = PROJECT_FILE_SERVER.newProjectFileServer()
+    CL.servers.PROJECT_FILE_SERVER.initialize()
+    CL.servers.PROJECT_FILE_SERVER.run()
+    console.log('Project File Server ......................................... Started')
 
-    DATA_FILE_SERVER = DATA_FILE_SERVER.newDataFileServer()
-    DATA_FILE_SERVER.initialize()
-    DATA_FILE_SERVER.run()
-    console.log('Data File Server ................... Started')
+    CL.servers.PLUGIN_SERVER = PLUGIN_SERVER.newPluginServer()
+    CL.servers.PLUGIN_SERVER.initialize()
+    CL.servers.PLUGIN_SERVER.run()
+    console.log('Plugin Server ............................................... Started')
 
-    EVENT_SERVER = EVENT_SERVER.newEventServer()
-    EVENT_SERVER.initialize()
-    EVENT_SERVER.run()
-    console.log('Events Server ...................... Started')
+    CL.servers.DATA_FILE_SERVER = DATA_FILE_SERVER.newDataFileServer()
+    CL.servers.DATA_FILE_SERVER.initialize()
+    CL.servers.DATA_FILE_SERVER.run()
+    console.log('Data File Server ............................................ Started')
 
-    TASK_MANAGER_SERVER = TASK_MANAGER_SERVER.newTaskManagerServer(WEB_SOCKETS_INTERFACE, EVENT_SERVER)
+    CL.servers.EVENT_SERVER = EVENT_SERVER.newEventServer()
+    CL.servers.EVENT_SERVER.initialize()
+    CL.servers.EVENT_SERVER.run()
+    console.log('Events Server ............................................... Started')
+
+    TASK_MANAGER_SERVER = TASK_MANAGER_SERVER.newTaskManagerServer()
     TASK_MANAGER_SERVER.initialize()
     TASK_MANAGER_SERVER.run()
-    console.log('Task Manager Server ................ Started')
+    console.log('Task Manager Server ......................................... Started')
 
-    CCXT_SERVER = CCXT_SERVER.newCCXTServer()
-    CCXT_SERVER.initialize()
-    CCXT_SERVER.run()
-    console.log('CCXT Server ........................ Started')
-    
-    WEB3_SERVER = WEB3_SERVER.newWeb3Server()
-    WEB3_SERVER.initialize()
-    WEB3_SERVER.run()
-    console.log('WEB3 Server ........................ Started')
+    CL.servers.CCXT_SERVER = CCXT_SERVER.newCCXTServer()
+    CL.servers.CCXT_SERVER.initialize()
+    CL.servers.CCXT_SERVER.run()
+    console.log('CCXT Server ................................................. Started')
+
+    CL.servers.WEB3_SERVER = WEB3_SERVER.newWeb3Server()
+    CL.servers.WEB3_SERVER.initialize()
+    CL.servers.WEB3_SERVER.run()
+    console.log('WEB3 Server ................................................. Started')
+
+    CL.servers.GITHUB_SERVER = GITHUB_SERVER.newGithubServer()
+    CL.servers.GITHUB_SERVER.initialize()
+    CL.servers.GITHUB_SERVER.run()
+    console.log('Github Server ............................................... Started')
 
     console.log('')
     console.log('CLIENT INTERFACES:')
     console.log('')
 
-    WEB_SOCKETS_INTERFACE = WEB_SOCKETS_INTERFACE.newWebSocketsInterface(EVENT_SERVER)
+    WEB_SOCKETS_INTERFACE = WEB_SOCKETS_INTERFACE.newWebSocketsInterface()
     WEB_SOCKETS_INTERFACE.initialize()
     WEB_SOCKETS_INTERFACE.run()
-    console.log('Web Sockets Interface .............. Listening at port ' + global.env.WEB_SOCKETS_INTERFACE_PORT)
+    console.log('Web Sockets Interface ....................................... Listening at port ' + global.env.WEB_SOCKETS_INTERFACE_PORT)
 
-    HTTP_INTERFACE = HTTP_INTERFACE.newHttpInterface(WEB_SERVER, DATA_FILE_SERVER, PROJECT_FILE_SERVER, UI_FILE_SERVER, PLUGIN_SERVER, CCXT_SERVER, WEB3_SERVER)
+    HTTP_INTERFACE = HTTP_INTERFACE.newHttpInterface()
     HTTP_INTERFACE.initialize()
     HTTP_INTERFACE.run()
-    console.log('Http Interface ..................... Listening at port ' + global.env.HTTP_INTERFACE_PORT)
+    console.log('Http Interface .............................................. Listening at port ' + global.env.HTTP_INTERFACE_PORT)
 
     console.log('')
-    console.log("You are running Superalgos Beta 8")
+    console.log("You are running Superalgos Beta 11")
     console.log('')
-    console.log("What's new? The following was implemented here:")
+    console.log("What's new? These are the main new features in this version:")
     console.log('')
-    console.log('Task Server Upgraded ............... This allow us to integrate crypto projects into the Task Server, opening the door to new types of bots defined at other projects.')
-    console.log('In-App Documentation Improved ...... This allow users to improve the docs / tutorials, correcting, expanding and translating pages.')
+    console.log('Governance System ........................................... Automates the distribution of SA Tokens and allow users to vote on the direction of the project.')
+    console.log('TensorFlow Integration ...................................... Allows creating and training ML models and use them in trading strategies.')
     console.log('')
-    console.log("What's next? At the development pipeline we have:")
+    console.log("What's next? This is the current development pipeline:")
     console.log('')
-    console.log('Ethereum Integration ............... This will allow mining data from an Ethereum network node, create indicators with it, an use it on strategies.')
-    console.log('Machine Learning Infrastructure .... This will enable a new kind of Bot that can learn from data mined. Later that knowledge can be used at trading strategies.')
+    console.log('Superalgos P2P Network ...................................... Will allow algo-traders to share trading signals with Superalgos users consuming these signals via a mobile app.')
+    console.log('Real-time Trading Signals ................................... Will allow users to emit trading signals and be rewarded with SA Tokens.')
+    console.log('Superalgos Mobile ........................................... Will allow users to consume trading signals for free and autonomously execute trades from their mobile phones.')
+    console.log('Ethereum Integration ........................................ Will allow mining data from an Ethereum network node, and bring it into the Superalgos workflow.')
+
     console.log('')
 
 } catch (err) {

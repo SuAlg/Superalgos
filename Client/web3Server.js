@@ -6,6 +6,10 @@ exports.newWeb3Server = function newWeb3Server() {
         getNetworkClientStatus: getNetworkClientStatus,
         createWalletAccount: createWalletAccount,
         getWalletBalances: getWalletBalances,
+        signData: signData,
+        recoverAddress: recoverAddress,
+        mnemonicToPrivateKey: mnemonicToPrivateKey,
+        payContributors: payContributors,
         initialize: initialize,
         finalize: finalize,
         run: run
@@ -56,7 +60,7 @@ exports.newWeb3Server = function newWeb3Server() {
                 return status
             }
         } catch (err) {
-            return { error: 'Could not connect to ' + key + '. ' + err.message + '.' }
+            return { error: 'Could not connect to ' + key + '. ' + err.stack + '.' }
         }
     }
 
@@ -73,7 +77,7 @@ exports.newWeb3Server = function newWeb3Server() {
             }
 
         } catch (err) {
-            return { error: 'Could not create the account. ' + err.message }
+            return { error: 'Could not create the account. ' + err.stack }
         }
     }
 
@@ -116,22 +120,22 @@ exports.newWeb3Server = function newWeb3Server() {
                     for (let j = 0; j < walletAccount.tokenBalances.length; j++) {
                         let tokenBalance = walletAccount.tokenBalances[j]
 
-                        if (tokenBalance.referenceParent === undefined) { continue }  
-                        if (tokenBalance.referenceParent.parentNode === undefined) { continue } 
-                        if (tokenBalance.referenceParent.smartContracts === undefined) { continue } 
+                        if (tokenBalance.referenceParent === undefined) { continue }
+                        if (tokenBalance.referenceParent.parentNode === undefined) { continue }
+                        if (tokenBalance.referenceParent.smartContracts === undefined) { continue }
 
                         if (tokenBalance.referenceParent.config.codeName === undefined) {
                             tokenBalance.error = 'Reference Parent without config.codeName defined.'
                             continue
-                        }  
+                        }
 
                         if (tokenBalance.referenceParent.smartContracts.config.address === undefined) {
                             tokenBalance.error = 'Reference Parent Smart Contract without config.address defined.'
                             continue
-                        } 
+                        }
 
                         let tokenContractAddress = tokenBalance.referenceParent.smartContracts.config.address
-                         // The minimum ABI to get ERC20 Token balance
+                        // The minimum ABI to get ERC20 Token balance
                         let minABI = [
                             // balanceOf
                             {
@@ -152,8 +156,8 @@ exports.newWeb3Server = function newWeb3Server() {
                         ];
 
                         let contract = new web3.eth.Contract(minABI, tokenContractAddress);
-                         
-                        try { 
+
+                        try {
                             tokenBalance.value = await contract.methods.balanceOf(walletAccount.config.address).call()
                         } catch (err) {
                             if (err.message.indexOf('Provided address') >= 0) {
@@ -170,7 +174,7 @@ exports.newWeb3Server = function newWeb3Server() {
                 return responseData
             }
         } catch (err) {
-            return { error: 'Could not connect to ' + key + '. ' + err.message + '.' }
+            return { error: 'Could not connect to ' + key + '. ' + err.stack + '.' }
         }
     }
 
@@ -200,6 +204,140 @@ exports.newWeb3Server = function newWeb3Server() {
                 web3Map.set(key, web3)
                 return web3
             }
+        }
+    }
+
+    async function signData(privateKey, data) {
+        try {
+
+            let web3 = new Web3()
+            let signature = web3.eth.accounts.sign(data, privateKey)
+
+            return {
+                signature: signature,
+                result: 'Ok'
+            }
+
+        } catch (err) {
+            return { error: 'Could not sign the data. ' + err.stack }
+        }
+    }
+
+    async function recoverAddress(signature) {
+        try {
+            let signatureObject = JSON.parse(signature)
+            let web3 = new Web3()
+            let address = web3.eth.accounts.recover(signatureObject)
+
+            return {
+                address: address,
+                result: 'Ok'
+            }
+
+        } catch (err) {
+            return { error: 'Could not recover address. ' + err.stack }
+        }
+    }
+
+    async function mnemonicToPrivateKey(mnemonic) {
+        try {
+            const ethers = require('ethers')
+            let wallet = ethers.Wallet.fromMnemonic(mnemonic)
+
+            if (wallet.privateKey !== undefined) {
+                return {
+                    address: wallet.address,
+                    privateKey: wallet.privateKey,
+                    result: 'Ok'
+                }
+            } else {
+                return {
+                    address: undefined,
+                    privateKey: undefined,
+                    result: 'Fail'
+                }
+            }
+
+        } catch (err) {
+            return { error: 'Could not convert to Private Key. ' + err.stack }
+        }
+    }
+
+    async function payContributors(contractAddress, contractAbi, paymentsArray, mnemonic) {
+        try {
+            let response = await mnemonicToPrivateKey(mnemonic)
+            let privateKey = response.privateKey
+
+            for (let i = 0; i < paymentsArray.length; i++) {
+                await CL.projects.foundations.utilities.asyncFunctions.sleep(10000)
+                let payment = paymentsArray[i]
+                sendTokens(
+                    i + 1,
+                    payment.userProfile,
+                    payment.from,
+                    payment.to,
+                    payment.amount
+                )
+            }
+
+            async function sendTokens(number, userProfile, fromAddress, toAddress, tokenAmount) {
+                try {
+                    console.log('')
+                    console.log('---------------------------------------------------------------------------------------------------------------------------------------------------')
+                    console.log(' Payment # ' + number + ' - User Profile: ' + userProfile + ' - SA Tokens Amount: ' +  tokenAmount / 1000000000000000000 + ' - Address: ' + toAddress)
+                    console.log('---------------------------------------------------------------------------------------------------------------------------------------------------')
+                    console.log('')
+
+                    const Tx = require('ethereumjs-tx').Transaction;
+                    const web3 = new Web3(new Web3.providers.HttpProvider('https://bsc-dataseed.binance.org/'))
+                    const amount = web3.utils.toHex(tokenAmount)
+                    privateKey = privateKey.replace('0x', '')
+                    const privateKeyBuffer = Buffer.from(privateKey, 'hex')
+                    const contractAbiObject = JSON.parse(contractAbi)
+                    const contract = new web3.eth.Contract(contractAbiObject, contractAddress, { from: fromAddress })
+                    const Common = require('ethereumjs-common').default
+                    const BSC_FORK = Common.forCustomChain(
+                        'mainnet',
+                        {
+                            name: 'Binance Smart Chain Mainnet',
+                            networkId: 56,
+                            chainId: 56,
+                            url: 'https://bsc-dataseed.binance.org/'
+                        },
+                        'istanbul',
+                    );
+
+                    const nonce = await web3.eth.getTransactionCount(fromAddress);
+
+                    const rawTransaction = {
+                        "from": fromAddress,
+                        "gasPrice": web3.utils.toHex(5000000000),
+                        "gasLimit": web3.utils.toHex(210000),
+                        "to": contractAddress, "value": "0x0",
+                        "data": contract.methods.transfer(toAddress, amount).encodeABI(),
+                        "nonce": web3.utils.toHex(nonce)
+                    };
+
+                    const transaction = new Tx(rawTransaction, { 'common': BSC_FORK })
+                    transaction.sign(privateKeyBuffer)
+
+                    console.log('Transaction:', rawTransaction)
+                    const result = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'))
+                    console.log('Result:', result)
+                    return result
+                } catch (err) {
+                    console.log('[ERROR] web3Server -> sendTokens -> err.stack = ' + err.stack)
+                }
+            }
+
+            return {
+                address: wallet.address,
+                privateKey: wallet.privateKey,
+                result: 'Ok'
+            }
+
+        } catch (err) {
+            return { error: 'Could not convert to Private Key. ' + err.stack }
         }
     }
 }

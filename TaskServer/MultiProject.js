@@ -31,6 +31,8 @@ exports.newMultiProject = function () {
             projectInstance.processModules = {}
             projectInstance.botModules = {}
 
+            if (projectDefinition.TS === undefined) { continue }
+
             /* Set up Utilities of this Project */
             if (projectDefinition.TS.utilities !== undefined) {
                 for (let j = 0; j < projectDefinition.TS.utilities.length; j++) {
@@ -93,7 +95,7 @@ exports.newMultiProject = function () {
             if (projectDefinition.TS.botModules !== undefined) {
                 for (let j = 0; j < projectDefinition.TS.botModules.length; j++) {
                     let botModuleDefinition = projectDefinition.TS.botModules[j]
-                    let path = global.env.PATH_TO_PROJECTS_REQUIRED + '/' + projectDefinition.name + '/' + 'TS' + '/' + 'Bot-Modules' + '/' +  botModuleDefinition.folderName + '/' + botModuleDefinition.fileName
+                    let path = global.env.PATH_TO_PROJECTS_REQUIRED + '/' + projectDefinition.name + '/' + 'TS' + '/' + 'Bot-Modules' + '/' + botModuleDefinition.folderName + '/' + botModuleDefinition.fileName
 
                     let requiredObject = require(path)
                     projectInstance.botModules[botModuleDefinition.propertyName] = requiredObject
@@ -101,7 +103,7 @@ exports.newMultiProject = function () {
             }
         }
 
-        TS.projects.superalgos.globals.taskConstants.PROJECTS_SCHEMA = PROJECTS_SCHEMA
+        TS.projects.foundations.globals.taskConstants.PROJECTS_SCHEMA = PROJECTS_SCHEMA
 
     }
 }
